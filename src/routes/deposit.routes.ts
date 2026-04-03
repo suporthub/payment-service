@@ -72,13 +72,14 @@ router.post('/crypto/address', requireAuth, async (req: Request, res: Response) 
 
   const user = req.user!;
   const result = await paymentOrchestrator.initiateDeposit('tylt_crypto', {
-    userId:        user.userId,
-    userType:      user.userType,
-    amount:        parsed.data.amount,
-    currency:      parsed.data.baseCurrency,
-    description:   parsed.data.description,
-    networkSymbol: parsed.data.networkSymbol,
-    meta:          { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
+    userId:          user.userId,
+    userType:        user.userType,
+    amount:          parsed.data.amount,
+    currency:        parsed.data.baseCurrency,
+    settledCurrency: parsed.data.settledCurrency,
+    description:     parsed.data.description,
+    networkSymbol:   parsed.data.networkSymbol,
+    meta:            { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
   });
 
   res.status(201).json({

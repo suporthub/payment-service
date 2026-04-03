@@ -38,7 +38,7 @@ export class TyltCryptoAdapter implements IPaymentGateway {
       merchantOrderId,
       baseAmount:          params.amount,
       baseCurrency:        params.currency,
-      settledCurrency:     'USD',
+      settledCurrency:     params.settledCurrency ?? 'USD',
       networkSymbol:       params.networkSymbol,
       callBackUrl:         config.TYLT_CALLBACK_URL ?? '',
       settleUnderpayment:  1,

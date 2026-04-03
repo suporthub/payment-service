@@ -25,21 +25,15 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(compression());
 
-// ── Raw body capture — MUST be before express.json() ─────────────────────────
+// ── Raw body capture for Webhooks ──────────────────────────────────────────────
 // Webhook signature verification requires the raw body buffer.
-app.use(
-  (req, _res, next) => {
-    let data: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => data.push(chunk));
-    req.on('end', () => {
-      // Attach raw buffer to request — used by webhook routes
-      (req as express.Request & { rawBody: Buffer }).rawBody = Buffer.concat(data);
-      data = [];
-      next();
-    });
-  },
-);
-app.use(express.json({ limit: '2mb' }));
+// We use the 'verify' hook of express.json to capture the raw buffer without draining the stream.
+app.use(express.json({
+  limit: '2mb',
+  verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // ── Request logging ───────────────────────────────────────────────────────────
 app.use(pinoHttp({ logger }));

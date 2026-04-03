@@ -1,4 +1,4 @@
-import { Kafka, Producer, logLevel } from 'kafkajs';
+import { Kafka, Producer, logLevel, Partitioners } from 'kafkajs';
 import { config } from '../config/env';
 import { logger } from './logger';
 
@@ -11,7 +11,10 @@ const kafka = new Kafka({
 let producer: Producer | null = null;
 
 export async function connectKafka(): Promise<void> {
-  producer = kafka.producer({ allowAutoTopicCreation: true });
+  producer = kafka.producer({
+    allowAutoTopicCreation: true,
+    createPartitioner: Partitioners.LegacyPartitioner
+  });
   await producer.connect();
   logger.info('Kafka producer connected');
 }

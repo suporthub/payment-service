@@ -25,6 +25,8 @@ export interface CreateDepositParams {
   amount:           number;
   /** ISO-4217 or crypto symbol: USD, VND, BTC, ETH, USDT… */
   currency:         string;
+  /** Used by Tylt Crypto to define which token the user will actually send (e.g. USDT) */
+  settledCurrency?: string | undefined;
   description?:     string | undefined;
   idempotencyKey?:  string | undefined;
   /** Network symbol for Tylt Crypto e.g. "TRC20", "ERC20" */
@@ -111,11 +113,15 @@ export const pay2payDepositSchema = z.object({
 });
 export type Pay2PayDepositInput = z.infer<typeof pay2payDepositSchema>;
 
-export const cryptoDepositSchema = z.object({
-  amount:        z.number().positive(),
-  baseCurrency:  z.string().min(2).max(10),
-  networkSymbol: z.string().min(2).max(20),
-  description:   z.string().max(255).optional(),
+const depositBaseSchema = z.object({
+  amount:      z.number().positive(),
+  description: z.string().max(255).optional(),
+});
+
+export const cryptoDepositSchema = depositBaseSchema.extend({
+  baseCurrency:    z.string().min(3).max(10),
+  settledCurrency: z.string().min(3).max(10),
+  networkSymbol:   z.string().min(1).max(20),
 });
 export type CryptoDepositInput = z.infer<typeof cryptoDepositSchema>;
 

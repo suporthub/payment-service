@@ -14,7 +14,7 @@ declare global {
 }
 
 interface JwtPayload {
-  userId:   string;
+  sub:      string;
   userType: string;
   email?:   string;
   role?:    string;
@@ -33,7 +33,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
   try {
     const payload = jwt.verify(token, config.JWT_SECRET) as JwtPayload;
     req.user = {
-      userId:   payload.userId,
+      userId:   payload.sub,
       userType: payload.userType,
       email:    payload.email,
       role:     payload.role,
@@ -60,7 +60,7 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction): 
       throw new AppError('FORBIDDEN', 403, 'Admin access required');
     }
     req.user = {
-      userId:   payload.userId,
+      userId:   payload.sub,
       userType: 'admin',
       email:    payload.email,
       role:     payload.role,
