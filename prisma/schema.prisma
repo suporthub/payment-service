@@ -1,0 +1,183 @@
+// Prisma schema for payment-service → payment_db
+// Database: PostgreSQL (via WireGuard)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PaymentGateway {
+  stripe
+  pay2pay
+  tylt_crypto
+}
+
+enum PaymentPurpose {
+  deposit
+  withdrawal
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+  DUPLICATE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GatewayPayment — one row per deposit / withdrawal attempt
+// This is the source of truth for payment lifecycle.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GatewayPayment {
+  id                  String         @id @default(uuid()) @db.Uuid
+  /// PAY-<uuid4> — opaque reference sent to the gateway (e.g. as order_id / metadata)
+  merchantReferenceId String         @unique @db.VarChar(64)
+  gateway             PaymentGateway
+  purpose             PaymentPurpose @default(deposit)
+  status              PaymentStatus  @default(PENDING)
+
+  // ── Who initiated this payment ─────────────────────────────────────────────
+  /// UserProfile.id from user-service (user_db)
+  userId              String         @db.Uuid
+  userType            String         @db.VarChar(20)
+  /// Admin ID if an admin initiated on behalf of a user
+  initiatorUserId     String?        @db.Uuid
+  initiatorUserType   String?        @db.VarChar(20)
+
+  // ── Amounts — all stages of the money journey ─────────────────────────────
+  /// Amount the user requested (before FX, before fees)
+  requestedAmount     Decimal        @db.Decimal(18, 6)
+  requestedCurrency   String         @db.VarChar(10)
+  /// Amount actually charged/received by the gateway (may differ for underpayment/overpayment)
+  paidAmount          Decimal?       @db.Decimal(18, 6)
+  paidCurrency        String?        @db.VarChar(10)
+  /// After FX conversion (always in settledCurrency = USD)
+  settledAmount       Decimal?       @db.Decimal(18, 6)
+  settledCurrency     String         @default("USD") @db.VarChar(10)
+  /// Net credited to user wallet after fees (may be < settledAmount)
+  creditedAmount      Decimal?       @db.Decimal(18, 6)
+
+  // ── Fee breakdown ─────────────────────────────────────────────────────────
+  feeAmount           Decimal?       @db.Decimal(18, 6)
+  feeCurrency         String?        @db.VarChar(10)
+  /// Exchange rate used at settlement (e.g. 0.000040 for VND→USD)
+  fxRate              Decimal?       @db.Decimal(18, 8)
+
+  // ── Gateway cross-references ──────────────────────────────────────────────
+  /// Stripe PaymentIntent ID / Tylt orderId / Pay2Pay txnId
+  providerReferenceId String?        @db.VarChar(128)
+  /// For Stripe idempotency key
+  idempotencyKey      String?        @db.VarChar(128)
+  /// Set after user-service confirms the wallet credit (UserTransaction.id)
+  linkedUserTxnId     String?        @db.Uuid
+
+  // ── Raw data ──────────────────────────────────────────────────────────────
+  providerPayload     Json?
+  metadata            Json?
+
+  /// For crypto: Tylt deposit address expiry time
+  expiresAt           DateTime?      @db.Timestamptz()
+  createdAt           DateTime       @default(now()) @db.Timestamptz()
+  updatedAt           DateTime       @updatedAt @db.Timestamptz()
+
+  events              GatewayPaymentEvent[]
+
+  @@unique([gateway, providerReferenceId])
+  @@index([userId, status, createdAt])
+  @@index([gateway, status])
+  @@index([status, createdAt])
+  @@map("gateway_payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GatewayPaymentEvent — immutable webhook/IPN event log
+// Written ONCE when a webhook arrives. Never mutated (except processingStatus).
+// Provides deduplication + full audit trail.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GatewayPaymentEvent {
+  id                  String        @id @default(uuid()) @db.Uuid
+  paymentId           String?       @db.Uuid
+  payment             GatewayPayment? @relation(fields: [paymentId], references: [id])
+  gateway             PaymentGateway
+  /// Stripe event ID (evt_xxx) / Tylt txnId / Pay2Pay txnId
+  providerEventId     String?       @db.VarChar(128)
+  /// e.g. "payment_intent.succeeded" / "ipn_success" / "crypto.completed"
+  eventType           String        @db.VarChar(64)
+  /// SHA-256 of raw body — second dedup line for gateways without unique eventId
+  payloadHash         String?       @db.VarChar(64)
+  merchantReferenceId String?       @db.VarChar(64)
+  processingStatus    WebhookStatus @default(RECEIVED)
+  processedAt         DateTime?     @db.Timestamptz()
+  processingError     String?
+  /// Full raw webhook body — never mutated
+  payload             Json
+  /// IP, UA, signature header value for audit
+  context             Json?
+  createdAt           DateTime      @default(now()) @db.Timestamptz()
+
+  @@unique([gateway, providerEventId])
+  @@unique([gateway, payloadHash])
+  @@index([paymentId])
+  @@index([processingStatus, createdAt])
+  @@map("gateway_payment_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GatewayConfig — admin-managed gateway settings
+// Enables toggling gateways and updating limits without code deploys.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GatewayConfig {
+  gateway            PaymentGateway @id
+  isEnabled          Boolean        @default(true)
+  displayName        String         @db.VarChar(80)
+  /// JSON array of supported currencies e.g. ["USD"] / ["VND"]
+  supportedCurrencies String[]
+  minAmountUsd       Decimal?       @db.Decimal(18, 6)
+  maxAmountUsd       Decimal?       @db.Decimal(18, 6)
+  /// Non-secret UI config (fee %, networks, etc.)
+  config             Json?
+  updatedAt          DateTime       @updatedAt @db.Timestamptz()
+
+  @@map("gateway_configs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FxRateOverride — admin-managed manual FX rate overrides
+// When set, overrides the live rate fetched from external API.
+// Stored in DB so it persists across service restarts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FxRateOverride {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// e.g. "VND_USD", "EUR_USD"
+  pair        String    @unique @db.VarChar(20)
+  rate        Decimal   @db.Decimal(18, 8)
+  setByAdminId String?  @db.Uuid
+  reason      String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @db.Timestamptz()
+
+  @@map("fx_rate_overrides")
+}

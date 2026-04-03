@@ -1,0 +1,58 @@
+﻿src/adapters/Pay2PayAdapter.ts(168,5): error TS2375: Type '{ providerEventId: string | undefined; eventType: string; merchantReferenceId: string | undefined; providerReferenceId: string | undefined; internalStatus: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED"; paidAmount: number | undefined; paidCurrency: string; rawPayload: Record<...>; }' is not assignable to type 'NormalizedGatewayEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'providerEventId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/adapters/StripeAdapter.ts(68,5): error TS2375: Type '{ clientSecret: string | undefined; merchantReferenceId: string; }' is not assignable to type 'GatewayDepositResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'clientSecret' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/adapters/StripeAdapter.ts(99,5): error TS2375: Type '{ providerEventId: string; eventType: "account.application.authorized" | "account.application.deauthorized" | "account.external_account.created" | "account.external_account.deleted" | ... 232 more ... | "treasury.received_debit.created"; ... 5 more ...; rawPayload: Record<string, unknown>; }' is not assignable to type 'NormalizedGatewayEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'paidAmount' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/adapters/TyltCryptoAdapter.ts(105,5): error TS2375: Type '{ providerEventId: string | undefined; eventType: string; merchantReferenceId: string | undefined; providerReferenceId: string | undefined; internalStatus: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED"; paidAmount: number | undefined; paidCurrency: string | undefined; rawPayload: Record<...>; }' is not assignable to type 'NormalizedGatewayEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'providerEventId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/middleware/auth.middleware.ts(35,5): error TS2375: Type '{ userId: string; userType: string; email: string | undefined; role: string | undefined; }' is not assignable to type 'AuthenticatedUser' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'email' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/middleware/auth.middleware.ts(62,5): error TS2375: Type '{ userId: string; userType: string; email: string | undefined; role: string; }' is not assignable to type 'AuthenticatedUser' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'email' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/routes/deposit.routes.ts(16,70): error TS2379: Argument of type '{ userId: string; userType: string; amount: number; currency: string; description: string | undefined; idempotencyKey: string | undefined; meta: { ip: string; userAgent: string; }; }' is not assignable to parameter of type 'CreateDepositParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/routes/deposit.routes.ts(45,71): error TS2379: Argument of type '{ userId: string; userType: string; amount: number; currency: string; description: string | undefined; meta: { ip: string; userAgent: string; }; }' is not assignable to parameter of type 'CreateDepositParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/routes/deposit.routes.ts(74,75): error TS2379: Argument of type '{ userId: string; userType: string; amount: number; currency: string; description: string | undefined; networkSymbol: string; meta: { ip: string; userAgent: string; }; }' is not assignable to parameter of type 'CreateDepositParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/routes/webhook.routes.ts(22,5): error TS7053: Element implicitly has an 'any' type because expression of type '"rawBody"' can't be used to index type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+  Property 'rawBody' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+src/routes/webhook.routes.ts(35,5): error TS7053: Element implicitly has an 'any' type because expression of type '"rawBody"' can't be used to index type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+  Property 'rawBody' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+src/routes/webhook.routes.ts(49,5): error TS7053: Element implicitly has an 'any' type because expression of type '"rawBody"' can't be used to index type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+  Property 'rawBody' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+src/services/PaymentOrchestrator.ts(17,41): error TS6133: 'WebhookStatus' is declared but its value is never read.
+src/services/PaymentOrchestrator.ts(26,17): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+src/services/PaymentOrchestrator.ts(84,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/PaymentOrchestrator.ts(85,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/PaymentOrchestrator.ts(122,11): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/PaymentOrchestrator.ts(123,11): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/PaymentOrchestrator.ts(228,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/PaymentOrchestrator.ts(234,13): error TS2375: Type '{ eventId: string; type: "DEPOSIT_COMPLETED"; paymentId: string; merchantRefId: string; gateway: PaymentGateway; userId: string; userType: string; creditAmountUsd: number; currency: "USD"; fxRate: number | undefined; createdAt: string; }' is not assignable to type 'DepositCompletedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'fxRate' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
