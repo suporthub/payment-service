@@ -6,6 +6,11 @@ import { AppError } from '../utils/errors';
 
 const router = Router();
 
+// ── Health Check ──────────────────────────────────────────────────────────────
+router.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', service: 'payment-service-api', ts: new Date().toISOString() });
+});
+
 // ── Stripe — create PaymentIntent ─────────────────────────────────────────────
 
 router.post('/stripe/intent', requireAuth, async (req: Request, res: Response) => {
