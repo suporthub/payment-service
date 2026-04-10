@@ -76,7 +76,7 @@ router.post('/crypto/address', requireAuth, async (req: Request, res: Response) 
     userType:        user.userType,
     amount:          parsed.data.amount,
     currency:        parsed.data.baseCurrency,
-    settledCurrency: parsed.data.settledCurrency,
+    settledCurrency: 'USDT',
     description:     parsed.data.description,
     networkSymbol:   parsed.data.networkSymbol,
     meta:            { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
