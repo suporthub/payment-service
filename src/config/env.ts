@@ -17,6 +17,7 @@ const envSchema = z.object({
     })
   ),
   REDIS_NAT_MAP:        z.string().optional(),
+
   // Kafka
   KAFKA_BROKERS:        z.string().default('localhost:9092'),
   KAFKA_CLIENT_ID:      z.string().default('payment-service'),

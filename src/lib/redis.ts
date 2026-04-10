@@ -12,14 +12,6 @@ import { logger } from './logger';
 // Solution: Use ioredis `natMap` to rewrite internal host:port → external VPN
 // host:port before making any connection attempt.
 //
-// Mapping (verified via `redis-cli CLUSTER NODES` on each VPN port):
-//   10.50.0.184:6379  →  185.131.54.146:31010  (master, slots 0-5460)
-//   10.50.0.186:6379  →  185.131.54.146:31011  (master, slots 5461-10922)
-//   10.50.0.188:6379  →  185.131.54.146:31003  (master, slots 10923-16383)
-//   10.50.0.190:6379  →  185.131.54.146:31009  (slave of 10.50.0.188)
-//   10.50.0.192:6379  →  185.131.54.146:31007  (slave of 10.50.0.186)
-//   10.50.0.194:6379  →  185.131.54.146:31008  (slave of 10.50.0.184)
-//
 // For local dev (127.0.0.1): natMap is empty — no rewriting needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
