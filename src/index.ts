@@ -16,6 +16,7 @@ import depositRoutes  from './routes/deposit.routes';
 import webhookRoutes  from './routes/webhook.routes';
 import adminRoutes    from './routes/admin.routes';
 import internalRoutes from './routes/internal.routes';
+import tyltRoutes     from './routes/tylt.routes';
 
 const app = express();
 
@@ -46,6 +47,8 @@ app.get('/health', (_req, res) => {
 // ── Route mounting ─────────────────────────────────────────────────────────────
 // Public prefix grouping that Nginx will route to this service
 app.use('/api/payments',            depositRoutes);
+// Tylt gateway lookup endpoints (crypto/fiat currencies + networks)
+app.use('/api/payments/tylt',       tyltRoutes);
 // Webhooks — no auth middleware; HMAC-only
 app.use('/webhooks',                webhookRoutes);
 // Admin — requires ADMIN_JWT_SECRET token

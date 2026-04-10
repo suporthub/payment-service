@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  deploy-to-k3s:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy securely over SSH (Direct Build)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd /v3/payment-service
+            
+            # Force server to match GitHub exactly, bypassing any local modifications
+            git fetch origin
+            git reset --hard origin/${{ github.ref_name }}
+            
+            # Build the fresh local image natively (no-cache to ensure updates)
+            docker build --no-cache -t payment-service:local .
+            
+            # Since you're using k3s, save and import it directly into the cluster runtime
+            docker save payment-service:local | sudo k3s ctr images import -
+            
+            # Force Kubernetes to restart the deployment and pick up the latest payment-service:local image
+            kubectl rollout restart deployment/payment-service -n default

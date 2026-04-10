@@ -10,8 +10,13 @@ const envSchema = z.object({
   DATABASE_URL:         z.string().min(1),
 
   // Redis
-  REDIS_CLUSTER_NODES:  z.string().default('127.0.0.1:6379'),
-
+  REDIS_CLUSTER_NODES:  z.string().default('127.0.0.1:6379').transform((s: string) => 
+    s.split(',').map((n: string) => {
+      const [host, port] = n.trim().split(':');
+      return { host: host!, port: parseInt(port || '6379', 10) };
+    })
+  ),
+  REDIS_NAT_MAP:        z.string().optional(),
   // Kafka
   KAFKA_BROKERS:        z.string().default('localhost:9092'),
   KAFKA_CLIENT_ID:      z.string().default('payment-service'),
@@ -63,14 +68,4 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-const d = parsed.data;
-
-const redisClusterNodes = d.REDIS_CLUSTER_NODES.split(',').map((node) => {
-  const [host, portStr] = node.trim().split(':');
-  return { host: host!, port: parseInt(portStr ?? '6379', 10) };
-});
-
-export const config = {
-  ...d,
-  redisClusterNodes,
-};
+export const config = parsed.data;

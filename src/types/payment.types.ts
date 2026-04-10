@@ -120,7 +120,6 @@ const depositBaseSchema = z.object({
 
 export const cryptoDepositSchema = depositBaseSchema.extend({
   baseCurrency:    z.string().min(3).max(10),
-  settledCurrency: z.string().min(3).max(10),
   networkSymbol:   z.string().min(1).max(20),
 });
 export type CryptoDepositInput = z.infer<typeof cryptoDepositSchema>;
