@@ -235,18 +235,20 @@ export class PaymentOrchestrator {
     // Step 8: Emit Kafka event if deposit completed
     if (event.internalStatus === 'COMPLETED' && creditedAmount && creditedAmount > 0) {
       const kafkaEvent: DepositCompletedEvent = {
-        eventId:          uuid(),
-        type:             'DEPOSIT_COMPLETED',
-        paymentId:        payment.id,
-        merchantRefId:    payment.merchantReferenceId,
+        eventId:         uuid(),
+        type:            'DEPOSIT_COMPLETED',
+        paymentId:       payment.id,
+        merchantRefId:   payment.merchantReferenceId,
         gateway,
-        userId:           payment.userId,
-        userType:         payment.userType,
-        tradingAccountId: payment.tradingAccountId ?? undefined,
-        creditAmountUsd:  creditedAmount,
-        currency:         'USD',
-        fxRate:           exchangeRate ?? undefined,
-        createdAt:        new Date().toISOString(),
+        userId:          payment.userId,
+        userType:        payment.userType,
+        // exactOptionalPropertyTypes: omit the key entirely if null/undefined
+        // rather than explicitly setting it to undefined
+        ...(payment.tradingAccountId ? { tradingAccountId: payment.tradingAccountId } : {}),
+        creditAmountUsd: creditedAmount,
+        currency:        'USD',
+        ...(exchangeRate != null ? { fxRate: exchangeRate } : {}),
+        createdAt:       new Date().toISOString(),
       };
       await publishEvent('payment.events', payment.userId, kafkaEvent as unknown as Record<string, unknown>);
       logger.info({ paymentId: payment.id, userId: payment.userId, creditedAmount }, 'DEPOSIT_COMPLETED event published');
