@@ -19,20 +19,23 @@ export interface AuthenticatedUser {
 export type PaymentGateway = 'stripe' | 'pay2pay' | 'tylt_crypto';
 
 export interface CreateDepositParams {
-  userId:           string;
-  userType:         string;
-  initiatorUserId?: string | undefined;
-  amount:           number;
+  userId:            string;
+  userType:          string;
+  /// The specific LiveUser.id (trading account) the user wants credited.
+  /// Frontend must send this for multi-account users.
+  tradingAccountId?: string | undefined;
+  initiatorUserId?:  string | undefined;
+  amount:            number;
   /** ISO-4217 or crypto symbol: USD, VND, BTC, ETH, USDT… */
-  currency:         string;
+  currency:          string;
   /** Used by Tylt Crypto to define which token the user will actually send (e.g. USDT) */
-  settledCurrency?: string | undefined;
-  description?:     string | undefined;
-  idempotencyKey?:  string | undefined;
+  settledCurrency?:  string | undefined;
+  description?:      string | undefined;
+  idempotencyKey?:   string | undefined;
   /** Network symbol for Tylt Crypto e.g. "TRC20", "ERC20" */
-  networkSymbol?:   string | undefined;
+  networkSymbol?:    string | undefined;
   /** Forward metadata (ip, userAgent) from original HTTP request */
-  meta?:            Record<string, string> | undefined;
+  meta?:             Record<string, string> | undefined;
 }
 
 export interface GatewayDepositResult {
@@ -82,17 +85,19 @@ export interface NormalizedGatewayEvent {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DepositCompletedEvent {
-  eventId:         string;  // UUID — dedup key for downstream consumers
-  type:            'DEPOSIT_COMPLETED';
-  paymentId:       string;
-  merchantRefId:   string;
-  gateway:         string;
-  userId:          string;
-  userType:        string;
-  creditAmountUsd: number;
-  currency:        'USD';
-  fxRate?:         number | undefined;
-  createdAt:       string;
+  eventId:          string;  // UUID — dedup key for downstream consumers
+  type:             'DEPOSIT_COMPLETED';
+  paymentId:        string;
+  merchantRefId:    string;
+  gateway:          string;
+  userId:           string;
+  userType:         string;
+  /// The specific trading account to credit. Carried through the entire pipeline.
+  tradingAccountId?: string;
+  creditAmountUsd:  number;
+  currency:         'USD';
+  fxRate?:          number | undefined;
+  createdAt:        string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,16 +105,19 @@ export interface DepositCompletedEvent {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const depositIntentSchema = z.object({
-  amount:          z.number().positive(),
-  currency:        z.string().min(2).max(10).toUpperCase(),
-  description:     z.string().max(255).optional(),
-  idempotencyKey:  z.string().max(128).optional(),
+  /// UUID of the LiveUser account to credit. Required for users with multiple accounts.
+  tradingAccountId: z.string().uuid().optional(),
+  amount:           z.number().positive(),
+  currency:         z.string().min(2).max(10).toUpperCase(),
+  description:      z.string().max(255).optional(),
+  idempotencyKey:   z.string().max(128).optional(),
 });
 export type DepositIntentInput = z.infer<typeof depositIntentSchema>;
 
 export const pay2payDepositSchema = z.object({
-  amountVnd:   z.number().int().positive(),
-  description: z.string().max(255).optional(),
+  tradingAccountId: z.string().uuid().optional(),
+  amountVnd:        z.number().int().positive(),
+  description:      z.string().max(255).optional(),
 });
 export type Pay2PayDepositInput = z.infer<typeof pay2payDepositSchema>;
 
@@ -119,8 +127,9 @@ const depositBaseSchema = z.object({
 });
 
 export const cryptoDepositSchema = depositBaseSchema.extend({
-  baseCurrency:    z.string().min(3).max(10),
-  networkSymbol:   z.string().min(1).max(20),
+  tradingAccountId: z.string().uuid().optional(),
+  baseCurrency:     z.string().min(3).max(10),
+  networkSymbol:    z.string().min(1).max(20),
 });
 export type CryptoDepositInput = z.infer<typeof cryptoDepositSchema>;
 

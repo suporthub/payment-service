@@ -60,6 +60,9 @@ model GatewayPayment {
   /// UserProfile.id from user-service (user_db)
   userId              String         @db.Uuid
   userType            String         @db.VarChar(20)
+  /// The specific LiveUser.id (trading account) to credit on completion.
+  /// Essential for multi-account: one UserProfile can own many trading accounts.
+  tradingAccountId    String?        @db.Uuid
   /// Admin ID if an admin initiated on behalf of a user
   initiatorUserId     String?        @db.Uuid
   initiatorUserType   String?        @db.VarChar(20)

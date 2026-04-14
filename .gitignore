@@ -16,3 +16,5 @@ __pycache__/
 Thumbs.db
 redis.Thumbs
 env.ts
+.github
+Dockerfile

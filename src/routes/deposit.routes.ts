@@ -19,13 +19,14 @@ router.post('/stripe/intent', requireAuth, async (req: Request, res: Response) =
 
   const user = req.user!;
   const result = await paymentOrchestrator.initiateDeposit('stripe', {
-    userId:          user.userId,
-    userType:        user.userType,
-    amount:          parsed.data.amount,
-    currency:        parsed.data.currency,
-    description:     parsed.data.description,
-    idempotencyKey:  parsed.data.idempotencyKey,
-    meta:            { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
+    userId:           user.userId,
+    userType:         user.userType,
+    tradingAccountId: parsed.data.tradingAccountId,
+    amount:           parsed.data.amount,
+    currency:         parsed.data.currency,
+    description:      parsed.data.description,
+    idempotencyKey:   parsed.data.idempotencyKey,
+    meta:             { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
   });
 
   res.status(201).json({
@@ -48,12 +49,13 @@ router.post('/pay2pay/redirect', requireAuth, async (req: Request, res: Response
 
   const user = req.user!;
   const result = await paymentOrchestrator.initiateDeposit('pay2pay', {
-    userId:      user.userId,
-    userType:    user.userType,
-    amount:      parsed.data.amountVnd,
-    currency:    'VND',
-    description: parsed.data.description,
-    meta:        { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
+    userId:           user.userId,
+    userType:         user.userType,
+    tradingAccountId: parsed.data.tradingAccountId,
+    amount:           parsed.data.amountVnd,
+    currency:         'VND',
+    description:      parsed.data.description,
+    meta:             { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
   });
 
   res.status(201).json({
@@ -77,14 +79,15 @@ router.post('/crypto/address', requireAuth, async (req: Request, res: Response) 
 
   const user = req.user!;
   const result = await paymentOrchestrator.initiateDeposit('tylt_crypto', {
-    userId:          user.userId,
-    userType:        user.userType,
-    amount:          parsed.data.amount,
-    currency:        parsed.data.baseCurrency,
-    settledCurrency: 'USDT',
-    description:     parsed.data.description,
-    networkSymbol:   parsed.data.networkSymbol,
-    meta:            { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
+    userId:           user.userId,
+    userType:         user.userType,
+    tradingAccountId: parsed.data.tradingAccountId,
+    amount:           parsed.data.amount,
+    currency:         parsed.data.baseCurrency,
+    settledCurrency:  'USDT',
+    description:      parsed.data.description,
+    networkSymbol:    parsed.data.networkSymbol,
+    meta:             { ip: req.ip ?? '', userAgent: req.headers['user-agent'] ?? '' },
   });
 
   res.status(201).json({
