@@ -57,7 +57,27 @@ export class TyltCryptoAdapter implements IPaymentGateway {
 
     logger.info({ gateway: 'tylt_crypto', merchantOrderId, userId: params.userId }, 'Creating Tylt deposit request');
 
-    const { data } = await axios.post<{ data: Record<string, unknown> }>(TYLT_API_URL, raw, { headers, timeout: 15_000 });
+    let data;
+    try {
+      const response = await axios.post<{ data: Record<string, unknown>; errorCode?: number; msg?: string }>(
+        TYLT_API_URL,
+        raw,
+        { headers, timeout: 15_000 }
+      );
+      
+      if (response.data.errorCode && response.data.errorCode !== 0) {
+        throw new AppError('GATEWAY_ERROR', 400, `Tylt API Error: ${response.data.msg || 'Unknown error'}`);
+      }
+      
+      data = response.data;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response) {
+        const msg = err.response.data?.msg || err.response.data?.message || err.message;
+        throw new AppError('GATEWAY_ERROR', 400, `Tylt API Error: ${msg}`);
+      }
+      throw err;
+    }
+
     const tyltData = data.data;
 
     if (!tyltData || !tyltData['paymentURL']) {
