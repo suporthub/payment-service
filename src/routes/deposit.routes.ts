@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
 import { paymentOrchestrator } from '../services/PaymentOrchestrator';
 import { depositIntentSchema, pay2payDepositSchema, cryptoDepositSchema } from '../types/payment.types';

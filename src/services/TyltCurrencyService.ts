@@ -1,6 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
-import {
+import type {
   ITyltCurrencyService,
   TyltBaseCurrency,
   TyltCryptoCurrency,

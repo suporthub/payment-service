@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import crypto from 'crypto';
-import { IPaymentGateway } from './IPaymentGateway';
-import { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
+import type { IPaymentGateway } from './IPaymentGateway';
+import type { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
 import { config } from '../config/env';
 import { logger } from '../lib/logger';
 import { AppError } from '../utils/errors';

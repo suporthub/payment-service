@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { requireAdmin } from '../middleware/auth.middleware';
 import { fxRateService } from '../services/FxRateService';
 import { fxRateOverrideSchema } from '../types/payment.types';

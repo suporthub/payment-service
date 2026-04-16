@@ -4,17 +4,17 @@ import { prismaWrite, prismaRead } from '../lib/prisma';
 import { publishEvent } from '../lib/kafka';
 import { logger } from '../lib/logger';
 import { AppError } from '../utils/errors';
-import { IPaymentGateway } from '../adapters/IPaymentGateway';
+import type { IPaymentGateway } from '../adapters/IPaymentGateway';
 import { stripeAdapter } from '../adapters/StripeAdapter';
 import { pay2payAdapter } from '../adapters/Pay2PayAdapter';
 import { fxRateService } from './FxRateService';
-import {
+import type {
   CreateDepositParams,
   GatewayDepositResult,
   DepositCompletedEvent,
   PaymentGateway,
 } from '../types/payment.types';
-import { GatewayPayment, PaymentStatus } from '@prisma/client';
+import type { GatewayPayment, PaymentStatus } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gateway registry — O (Open/Closed): add new adapters here, nothing else changes
@@ -95,6 +95,26 @@ export class PaymentOrchestrator {
   }
 
   // ── Phase 2: Process inbound webhook/IPN ─────────────────────────────────
+  //
+  // Idempotency strategy — 4 layered guards:
+  //
+  // Layer 1 — Hash dedupe (DB unique constraint):
+  //   The SHA-256 of the raw body is stored with a UNIQUE constraint.
+  //   Byte-for-byte identical retries are rejected at the DB level before any logic runs.
+  //
+  // Layer 2 — Atomic status lock (UPDATE ... WHERE status NOT IN terminal states):
+  //   A raw SQL UPDATE only transitions the row if it is still in a non-terminal state.
+  //   0 rows affected = someone else already completed it. This eliminates the race condition
+  //   where two concurrent webhooks both pass in-memory status checks.
+  //
+  // Layer 3 — Status regression protection:
+  //   A "Pending" or "Expired" webhook arriving after "Completed" is silently ignored.
+  //   We never let a less-significant status overwrite a terminal one.
+  //
+  // Layer 4 — kafkaPublishedAt flag:
+  //   Set atomically after a successful Kafka send. If a webhook is retried and the DB row
+  //   already has kafkaPublishedAt set, we skip publishing. This prevents double-crediting
+  //   even when Kafka publish succeeded but the response to the gateway timed out.
 
   async processWebhook(
     gateway:  PaymentGateway,
@@ -104,14 +124,16 @@ export class PaymentOrchestrator {
   ): Promise<{ ok: boolean; duplicate?: boolean; ignored?: boolean; reason?: string }> {
     const adapter = getAdapter(gateway);
 
-    // Step 1: Verify signature — throws AppError on failure
+    // ── Step 1: Verify HMAC signature — throws AppError(400) on failure ───────
     adapter.verifyWebhook(rawBody, headers);
 
-    // Step 2: Parse the event
-    const event = adapter.parseWebhookEvent(rawBody, headers);
+    // ── Step 2: Parse the event ───────────────────────────────────────────────
+    const event       = adapter.parseWebhookEvent(rawBody, headers);
     const payloadHash = sha256Hex(rawBody);
 
-    // Step 3: Record the raw event (idempotency via unique constraint)
+    // ── Step 3 (Layer 1): Record the raw event with unique hash constraint ────
+    // This is the first idempotency gate. Any byte-for-byte identical retry will hit
+    // the P2002 unique violation on (gateway, payloadHash) and return 200 immediately.
     let dbEvent;
     try {
       dbEvent = await prismaWrite.gatewayPaymentEvent.create({
@@ -128,19 +150,17 @@ export class PaymentOrchestrator {
       });
     } catch (err: unknown) {
       const isUniqueViolation =
-        typeof err === 'object' &&
-        err !== null &&
-        'code' in err &&
+        typeof err === 'object' && err !== null && 'code' in err &&
         (err as { code: string }).code === 'P2002';
 
       if (isUniqueViolation) {
-        logger.info({ gateway, eventType: event.eventType }, 'Duplicate webhook received — skipping');
+        logger.info({ gateway, eventType: event.eventType, payloadHash }, 'Duplicate webhook (hash match) — skipping');
         return { ok: true, duplicate: true };
       }
       throw err;
     }
 
-    // Step 4: Find the payment
+    // ── Step 4: Find the payment record ──────────────────────────────────────
     const merchantRef = event.merchantReferenceId;
     const providerRef = event.providerReferenceId;
 
@@ -157,27 +177,34 @@ export class PaymentOrchestrator {
         where: { id: dbEvent.id },
         data:  { processingStatus: 'IGNORED', processedAt: new Date(), processingError: 'Payment not found' },
       });
-      logger.warn({ gateway, merchantRef, providerRef }, 'Webhook received but payment not found');
+      logger.warn({ gateway, merchantRef, providerRef }, 'Webhook received but matching payment not found — ignored');
       return { ok: true, ignored: true, reason: 'payment_not_found' };
     }
 
-    // Link event to payment
+    // Link raw event to payment for audit trail
     await prismaWrite.gatewayPaymentEvent.update({
       where: { id: dbEvent.id },
       data:  { paymentId: payment.id },
     });
 
-    // Step 5: Application-level idempotency guard
-    if (payment.status === 'COMPLETED') {
+    // ── Step 5 (Layer 3): Status regression protection ───────────────────────
+    // Terminal statuses that should never be overwritten by a subsequent webhook.
+    const TERMINAL_STATUSES = new Set<string>(['COMPLETED', 'CANCELLED', 'FAILED', 'REFUNDED', 'EXPIRED']);
+
+    if (TERMINAL_STATUSES.has(payment.status)) {
       await prismaWrite.gatewayPaymentEvent.update({
         where: { id: dbEvent.id },
-        data:  { processingStatus: 'DUPLICATE', processedAt: new Date(), processingError: 'Payment already COMPLETED' },
+        data:  { processingStatus: 'DUPLICATE', processedAt: new Date(), processingError: `Payment already in terminal status: ${payment.status}` },
       });
+      logger.info(
+        { gateway, paymentId: payment.id, currentStatus: payment.status, incomingStatus: event.internalStatus },
+        'Webhook ignored — payment already in terminal status (status regression protection)',
+      );
       return { ok: true, duplicate: true };
     }
 
-    // Step 6: Resolve settlement amounts
-    let settledAmount  = event.settledAmount  ?? event.paidAmount  ?? 0;
+    // ── Step 6: Resolve settlement amounts ────────────────────────────────────
+    let settledAmount   = event.settledAmount ?? event.paidAmount ?? 0;
     let settledCurrency = event.settledCurrency ?? 'USD';
     let feeAmount       = event.feeAmount ?? null;
     let exchangeRate    = event.exchangeRate ?? null;
@@ -204,7 +231,7 @@ export class PaymentOrchestrator {
     if (gateway === 'pay2pay' && event.internalStatus === 'COMPLETED') {
       const vndAmount = event.paidAmount ?? 0;
       const fxRate    = await fxRateService.getVndToUsdRate();
-      const ipnFee    = null; // fee from IPN body if present
+      const ipnFee    = null;
       const fees      = pay2payAdapter.calculateFees(vndAmount, fxRate, ipnFee);
       settledAmount   = fees.creditUsd;
       settledCurrency = 'USD';
@@ -212,11 +239,19 @@ export class PaymentOrchestrator {
       exchangeRate    = fxRate;
     }
 
-    // Step 7: Update payment record
     const creditedAmount = event.internalStatus === 'COMPLETED' ? settledAmount : null;
 
-    await prismaWrite.gatewayPayment.update({
-      where: { id: payment.id },
+    // ── Step 7 (Layer 2): Atomic status transition — the race-condition guard ─
+    //
+    // We use a raw UPDATE with a WHERE clause that checks the current status.
+    // If two concurrent webhooks both reach this point, only ONE of them will
+    // get count=1 back from Postgres. The other gets count=0 and is treated as a duplicate.
+    // This is the industry-standard "compare-and-swap" pattern for financial systems.
+    const { count: updatedCount } = await prismaWrite.gatewayPayment.updateMany({
+      where: {
+        id:     payment.id,
+        status: { notIn: [...TERMINAL_STATUSES] as PaymentStatus[] },
+      },
       data: {
         status:              event.internalStatus as PaymentStatus,
         paidAmount:          event.paidAmount  ?? null,
@@ -232,29 +267,77 @@ export class PaymentOrchestrator {
       },
     });
 
-    // Step 8: Emit Kafka event if deposit completed
-    if (event.internalStatus === 'COMPLETED' && creditedAmount && creditedAmount > 0) {
-      const kafkaEvent: DepositCompletedEvent = {
-        eventId:         uuid(),
-        type:            'DEPOSIT_COMPLETED',
-        paymentId:       payment.id,
-        merchantRefId:   payment.merchantReferenceId,
-        gateway,
-        userId:          payment.userId,
-        userType:        payment.userType,
-        // exactOptionalPropertyTypes: omit the key entirely if null/undefined
-        // rather than explicitly setting it to undefined
-        ...(payment.tradingAccountId ? { tradingAccountId: payment.tradingAccountId } : {}),
-        creditAmountUsd: creditedAmount,
-        currency:        'USD',
-        ...(exchangeRate != null ? { fxRate: exchangeRate } : {}),
-        createdAt:       new Date().toISOString(),
-      };
-      await publishEvent('payment.events', payment.userId, kafkaEvent as unknown as Record<string, unknown>);
-      logger.info({ paymentId: payment.id, userId: payment.userId, creditedAmount }, 'DEPOSIT_COMPLETED event published');
+    if (updatedCount === 0) {
+      // Another concurrent webhook already transitioned this payment — this one loses the race.
+      await prismaWrite.gatewayPaymentEvent.update({
+        where: { id: dbEvent.id },
+        data:  { processingStatus: 'DUPLICATE', processedAt: new Date(), processingError: 'Lost atomic update race' },
+      });
+      logger.info(
+        { gateway, paymentId: payment.id },
+        'Webhook ignored — lost atomic update race (concurrent duplicate)',
+      );
+      return { ok: true, duplicate: true };
     }
 
-    // Step 9: Mark event processed
+    // Reload the payment to get the latest state after the update.
+    // This is necessary to read the kafkaPublishedAt field from the DB.
+    const freshPayment = await prismaWrite.gatewayPayment.findUnique({ where: { id: payment.id } });
+
+    // ── Step 8 (Layer 4): Kafka publish — at-most-once guard ─────────────────
+    //
+    // We only publish if:
+    //   a) The incomingStatus is COMPLETED with a positive creditedAmount
+    //   b) kafkaPublishedAt is NULL — meaning we haven't published for this payment yet.
+    //
+    // If Kafka publish succeeds, we immediately set kafkaPublishedAt so any future retry
+    // of this webhook will see the flag and skip publishing.
+    //
+    // If Kafka publish fails, kafkaPublishedAt stays NULL, a CRITICAL error is logged,
+    // and we still return 200 to the gateway. A reconciliation job can detect
+    // payments where status=COMPLETED but kafkaPublishedAt IS NULL and re-publish.
+    if (event.internalStatus === 'COMPLETED' && creditedAmount && creditedAmount > 0) {
+      if (freshPayment?.kafkaPublishedAt) {
+        // kafkaPublishedAt is set — Kafka was already published in a previous webhook delivery.
+        logger.info(
+          { paymentId: payment.id, kafkaPublishedAt: freshPayment.kafkaPublishedAt },
+          'Skipping Kafka publish — DEPOSIT_COMPLETED already published (kafkaPublishedAt is set)',
+        );
+      } else {
+        const kafkaEvent: DepositCompletedEvent = {
+          eventId:         uuid(),
+          type:            'DEPOSIT_COMPLETED',
+          paymentId:       payment.id,
+          merchantRefId:   payment.merchantReferenceId,
+          gateway,
+          userId:          payment.userId,
+          userType:        payment.userType,
+          ...(payment.tradingAccountId ? { tradingAccountId: payment.tradingAccountId } : {}),
+          creditAmountUsd: creditedAmount,
+          currency:        'USD',
+          ...(exchangeRate != null ? { fxRate: exchangeRate } : {}),
+          createdAt:       new Date().toISOString(),
+        };
+        try {
+          await publishEvent('payment.events', payment.userId, kafkaEvent as unknown as Record<string, unknown>);
+          // Atomically stamp kafkaPublishedAt — this is the single "wallet credit authorised" signal.
+          await prismaWrite.gatewayPayment.update({
+            where: { id: payment.id },
+            data:  { kafkaPublishedAt: new Date() },
+          });
+          logger.info({ paymentId: payment.id, userId: payment.userId, creditedAmount }, 'DEPOSIT_COMPLETED event published to Kafka');
+        } catch (kafkaErr) {
+          // kafkaPublishedAt is NOT set. This payment will be caught by the reconciliation job.
+          logger.error(
+            { paymentId: payment.id, userId: payment.userId, creditedAmount, err: kafkaErr },
+            'CRITICAL: Failed to publish DEPOSIT_COMPLETED to Kafka — kafkaPublishedAt not stamped. Manual reconciliation required.',
+          );
+          // Do NOT rethrow — the DB is already committed, return 200 to the gateway.
+        }
+      }
+    }
+
+    // ── Step 9: Mark event as PROCESSED ──────────────────────────────────────
     await prismaWrite.gatewayPaymentEvent.update({
       where: { id: dbEvent.id },
       data:  { processingStatus: 'PROCESSED', processedAt: new Date() },

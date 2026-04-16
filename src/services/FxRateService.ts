@@ -4,7 +4,7 @@ import { prismaWrite, prismaRead } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { config } from '../config/env';
 import { AppError } from '../utils/errors';
-import { FxRateOverrideInput } from '../types/payment.types';
+import type { FxRateOverrideInput } from '../types/payment.types';
 
 const REDIS_KEY_PREFIX = 'fx:rate:';
 

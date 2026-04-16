@@ -93,6 +93,9 @@ model GatewayPayment {
   idempotencyKey      String?        @db.VarChar(128)
   /// Set after user-service confirms the wallet credit (UserTransaction.id)
   linkedUserTxnId     String?        @db.Uuid
+  /// Timestamp when DEPOSIT_COMPLETED was successfully published to Kafka.
+  /// NULL means not yet published. Used to prevent double-publish on webhook retries.
+  kafkaPublishedAt    DateTime?      @db.Timestamptz()
 
   // ── Raw data ──────────────────────────────────────────────────────────────
   providerPayload     Json?

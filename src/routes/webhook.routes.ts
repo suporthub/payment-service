@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { paymentOrchestrator } from '../services/PaymentOrchestrator';
 import { logger } from '../lib/logger';
 
@@ -51,7 +52,9 @@ router.post('/tylt', async (req: Request, res: Response) => {
     buildContext(req),
   );
   logger.info({ gateway: 'tylt_crypto', result }, 'Tylt webhook processed');
-  res.json({ received: true });
+  // Tylt docs require HTTP 200 with body text "ok" (exact lowercase string).
+  // Any non-2xx or non-conforming body may cause Tylt to mark the webhook as failed.
+  res.status(200).send('ok');
 });
 
 export default router;

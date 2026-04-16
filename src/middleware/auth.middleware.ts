@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 import { AppError } from '../utils/errors';
-import { AuthenticatedUser } from '../types/payment.types';
+import type { AuthenticatedUser } from '../types/payment.types';
 
 // Augment Express Request to carry the authenticated user
 declare global {

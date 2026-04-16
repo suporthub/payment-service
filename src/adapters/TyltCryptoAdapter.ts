@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import axios from 'axios';
-import { IPaymentGateway } from './IPaymentGateway';
-import { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
+import type { IPaymentGateway } from './IPaymentGateway';
+import type { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
 import { config } from '../config/env';
 import { logger } from '../lib/logger';
 import { AppError } from '../utils/errors';
@@ -109,35 +109,112 @@ export class TyltCryptoAdapter implements IPaymentGateway {
   }
 
   // ── IPaymentGateway: parseWebhookEvent ────────────────────────────────────
+  //
+  // Real Tylt webhook shape:
+  // {
+  //   "type": "pay-in",
+  //   "data": {
+  //     "orderId": "...",          ← Tylt's internal order ID
+  //     "merchantOrderId": "...", ← our PAY-xxx reference
+  //     "status": "Completed",
+  //     "baseAmount": 100,
+  //     "baseAmountReceived": 100,    ← gross amount received
+  //     "settledAmountCredited": 9.9, ← net after Tylt commission (credit this)
+  //     "commission": 0.1,
+  //     "network": "BSC",
+  //     "transactions": [{ "transactionHash": "0x..." }],
+  //     ...
+  //   }
+  // }
 
   parseWebhookEvent(rawBody: Buffer, _headers: Record<string, string>): NormalizedGatewayEvent {
-    const body = JSON.parse(rawBody.toString('utf8')) as Record<string, unknown>;
-    const status = String(body['status'] ?? '');
+    const envelope = JSON.parse(rawBody.toString('utf8')) as Record<string, unknown>;
 
+    // Tylt wraps the actual data inside a "data" key at the top level.
+    // Fall back to the root for any legacy/test payloads without the wrapper.
+    const body = (
+      envelope['data'] !== null &&
+      typeof envelope['data'] === 'object' &&
+      !Array.isArray(envelope['data'])
+        ? envelope['data']
+        : envelope
+    ) as Record<string, unknown>;
+
+    const status         = String(body['status'] ?? '');
     const internalStatus = this.mapStatus(status);
 
     const merchantOrderId = String(body['merchantOrderId'] ?? '');
     const orderId         = String(body['orderId'] ?? '');
-    const baseReceived    = body['baseAmountReceived'] != null
+
+    // Gross amount received from the blockchain (before Tylt fee)
+    const baseAmountReceived = body['baseAmountReceived'] != null
       ? parseFloat(String(body['baseAmountReceived']))
       : undefined;
 
+    // Net amount credited to merchant AFTER Tylt commission — this is what we credit to the user.
+    // For a deposit of 100 USDT with 0.1 commission, this would be 99.9 USDT.
+    const settledAmountCredited = body['settledAmountCredited'] != null
+      ? parseFloat(String(body['settledAmountCredited']))
+      : undefined;
+
+    const commission = body['commission'] != null
+      ? parseFloat(String(body['commission']))
+      : undefined;
+
+    // Extract first transaction hash if present (for audit trail)
+    const transactions = Array.isArray(body['transactions']) ? body['transactions'] : [];
+    const firstTxHash  = (transactions[0] as Record<string, unknown> | undefined)?.['transactionHash'];
+
+    logger.info(
+      {
+        gateway: 'tylt_crypto',
+        merchantOrderId,
+        orderId,
+        status,
+        internalStatus,
+        baseAmountReceived,
+        settledAmountCredited,
+        commission,
+        network: body['network'],
+      },
+      '[TyltCryptoAdapter] parseWebhookEvent',
+    );
+
     return {
-      providerEventId:     orderId   || undefined,
-      eventType:           `crypto.${status.toLowerCase()}`,
-      merchantReferenceId: merchantOrderId || undefined,
-      providerReferenceId: orderId   || undefined,
+      providerEventId:     orderId              || undefined,
+      eventType:           `crypto.${status.replace(/\s+/g, '_').toLowerCase()}`,
+      merchantReferenceId: merchantOrderId      || undefined,
+      providerReferenceId: orderId              || undefined,
       internalStatus,
-      paidAmount:    baseReceived,
-      paidCurrency:  String(body['baseCurrency'] ?? '').toUpperCase() || undefined,
-      rawPayload:    body,
+      // paidAmount = gross received from blockchain
+      paidAmount:          baseAmountReceived,
+      paidCurrency:        String(body['baseCurrency']    ?? '').toUpperCase() || undefined,
+      // settledAmount = net after Tylt's commission — credit this to the user
+      settledAmount:       settledAmountCredited,
+      settledCurrency:     String(body['settledCurrency'] ?? '').toUpperCase() || undefined,
+      feeAmount:           commission,
+      feeCurrency:         String(body['settledCurrency'] ?? '').toUpperCase() || undefined,
+      // Store the full envelope (including the outer "type" field) as raw payload for audit
+      rawPayload: {
+        ...body,
+        _tyltType:       envelope['type'] ?? 'pay-in',
+        _transactionHash: firstTxHash  ?? null,
+        _network:        body['network'] ?? null,
+      },
     };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  /**
+   * Maps Tylt's human-readable status strings to our internal PaymentStatus enum.
+   *
+   * Note: "Under Payment" / "Over Payment" are still treated as COMPLETED
+   * because Tylt settles them and sends settledAmountCredited.
+   * The orchestrator will credit the user the net credited amount regardless.
+   */
   mapStatus(status: string): NormalizedGatewayEvent['internalStatus'] {
-    switch (status.toLowerCase()) {
+    switch (status.toLowerCase().replace(/\s+/g, ' ').trim()) {
       case 'completed':
       case 'paid':
       case 'success':

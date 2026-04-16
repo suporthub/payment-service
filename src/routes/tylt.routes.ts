@@ -18,9 +18,10 @@
  *  - OCP: add endpoints by adding route handlers; zero changes to the service.
  */
 
-import { Router, Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
-import { ITyltCurrencyService } from '../services/ITyltCurrencyService';
+import type { ITyltCurrencyService } from '../services/ITyltCurrencyService';
 import { tyltCurrencyService } from '../services/TyltCurrencyService';
 
 // ─────────────────────────────────────────────────────────────────────────────

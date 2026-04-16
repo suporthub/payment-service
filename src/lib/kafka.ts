@@ -1,4 +1,5 @@
-import { Kafka, Producer, logLevel, Partitioners } from 'kafkajs';
+import type { Producer} from 'kafkajs';
+import { Kafka, logLevel, Partitioners } from 'kafkajs';
 import { config } from '../config/env';
 import { logger } from './logger';
 

@@ -1,4 +1,4 @@
-import { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
+import type { CreateDepositParams, GatewayDepositResult, NormalizedGatewayEvent, PaymentGateway } from '../types/payment.types';
 
 /**
  * IPaymentGateway — the single contract all gateway adapters must implement.
