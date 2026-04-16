@@ -18,3 +18,5 @@ redis.Thumbs
 env.ts
 .github
 Dockerfile
+logs/
+*.log*

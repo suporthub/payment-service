@@ -37,12 +37,16 @@ if (config.LOG_TO_FILE) {
       file:      path.join(logDir, `${config.SERVICE_NAME}.log`),
       frequency: 'daily',
       limit:     { count: 30 },
+      size:      '100m',          // roll early if a single file exceeds 100 MB
     },
     level: 'debug',
   });
 }
 
 export const logger = pino(
-  { level: config.LOG_LEVEL },
+  {
+    level: config.LOG_LEVEL,
+    base:  { service: config.SERVICE_NAME },
+  },
   pino.transport({ targets }),
 );
