@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+dist
+.git
+.github
+.env
+Dockerfile
+.dockerignore
+k8s
+logs
+prisma/migrations
+*.tar
