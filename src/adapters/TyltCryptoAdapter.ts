@@ -181,9 +181,18 @@ export class TyltCryptoAdapter implements IPaymentGateway {
     );
 
     return {
-      providerEventId:     orderId              || undefined,
+      // Tylt does NOT issue a unique per-event/per-delivery ID.
+      // The orderId is the same across ALL lifecycle webhooks for the same order
+      // (Pending → Under Payment → Completed). Setting providerEventId to the orderId
+      // would cause a unique constraint violation on the second webhook (same orderId = same providerEventId).
+      // Solution: leave providerEventId as undefined for Tylt.
+      // Deduplication instead relies on:
+      //   - (gateway, payloadHash) unique constraint → catches byte-for-byte identical retries
+      //   - Atomic status lock in orchestrator → prevents concurrent race conditions
+      providerEventId:     undefined,
       eventType:           `crypto.${status.replace(/\s+/g, '_').toLowerCase()}`,
       merchantReferenceId: merchantOrderId      || undefined,
+      // providerReferenceId = Tylt's orderId — used to look up the payment row if merchantOrderId is missing
       providerReferenceId: orderId              || undefined,
       internalStatus,
       // paidAmount = gross received from blockchain
@@ -197,9 +206,9 @@ export class TyltCryptoAdapter implements IPaymentGateway {
       // Store the full envelope (including the outer "type" field) as raw payload for audit
       rawPayload: {
         ...body,
-        _tyltType:       envelope['type'] ?? 'pay-in',
+        _tyltType:        envelope['type'] ?? 'pay-in',
         _transactionHash: firstTxHash  ?? null,
-        _network:        body['network'] ?? null,
+        _network:         body['network'] ?? null,
       },
     };
   }
