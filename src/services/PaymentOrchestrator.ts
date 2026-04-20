@@ -227,16 +227,19 @@ export class PaymentOrchestrator {
       }
     }
 
-    // Pay2Pay: apply live FX rate to convert VND → USD
+    // Pay2Pay: apply live FX rate to convert VND → USD.
+    // Use the actual fee from the IPN body (event.feeAmount in VND) if Pay2Pay sends it,
+    // otherwise calculateFees() falls back to estimating from PAY2PAY_MERCHANT_FEE_PERCENT.
+    // This matches v1 legacy behaviour.
     if (gateway === 'pay2pay' && event.internalStatus === 'COMPLETED') {
-      const vndAmount = event.paidAmount ?? 0;
-      const fxRate    = await fxRateService.getVndToUsdRate();
-      const ipnFee    = null;
-      const fees      = pay2payAdapter.calculateFees(vndAmount, fxRate, ipnFee);
-      settledAmount   = fees.creditUsd;
-      settledCurrency = 'USD';
-      feeAmount       = fees.totalFeeUsd;
-      exchangeRate    = fxRate;
+      const vndAmount  = event.paidAmount ?? 0;
+      const fxRate     = await fxRateService.getVndToUsdRate();
+      const ipnFeeVnd  = event.feeAmount ?? null;   // VND fee from IPN, or null to estimate
+      const fees       = pay2payAdapter.calculateFees(vndAmount, fxRate, ipnFeeVnd);
+      settledAmount    = fees.creditUsd;
+      settledCurrency  = 'USD';
+      feeAmount        = fees.totalFeeUsd;
+      exchangeRate     = fxRate;
     }
 
     const creditedAmount = event.internalStatus === 'COMPLETED' ? settledAmount : null;

@@ -141,16 +141,27 @@ export class Pay2PayAdapter implements IPaymentGateway {
       throw new AppError('GATEWAY_DISABLED', 503, 'Pay2Pay IPN credentials not configured');
     }
 
-    const receivedApiKey = headers['p-api-key'] ?? headers['P-API-KEY'] ?? '';
-    if (receivedApiKey !== apiKey) {
-      throw new AppError('INVALID_WEBHOOK_SIGNATURE', 400, 'Invalid Pay2Pay API key');
+    const receivedApiKey = headers['p-api-key'] ?? headers['P-API-KEY'];
+    const receivedSig    = headers['p-signature'] ?? headers['P-SIGNATURE'];
+
+    // Step 1: Validate required headers → 400 Bad Request
+    if (!receivedApiKey || !receivedSig) {
+      throw new AppError('MISSING_SECURITY_HEADERS', 400, 'Missing security headers');
     }
 
-    const receivedSig = headers['p-signature'] ?? headers['P-SIGNATURE'] ?? '';
+    // Step 2: Validate API key → 401 Unauthorized
+    if (receivedApiKey !== apiKey) {
+      throw new AppError('UNAUTHORIZED', 401, 'Invalid API Key');
+    }
+
     const expectedSig = computeIpnSignature(rawBody.toString('utf8'), secretKey);
 
-    if (receivedSig !== expectedSig) {
-      throw new AppError('INVALID_WEBHOOK_SIGNATURE', 400, 'Pay2Pay IPN signature mismatch');
+    const receivedBuffer = Buffer.from(receivedSig, 'utf8');
+    const expectedBuffer = Buffer.from(expectedSig, 'utf8');
+
+    // Prevent timing attacks by using fixed-time equality check
+    if (receivedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)) {
+      throw new AppError('INVALID_WEBHOOK_SIGNATURE', 401, 'Pay2Pay IPN signature mismatch');
     }
   }
 
@@ -165,6 +176,11 @@ export class Pay2PayAdapter implements IPaymentGateway {
     const txnId    = String(body['txnId']   ?? '');
     const amount   = body['amount'] != null ? parseFloat(String(body['amount'])) : undefined;
 
+    // Read the actual fee from the IPN body if Pay2Pay sends it.
+    // This matches v1 legacy behaviour: use the real fee when available,
+    // fall back to the configured fee % estimate when absent.
+    const feeVndFromIpn = body['fee'] != null ? parseFloat(String(body['fee'])) : undefined;
+
     return {
       providerEventId:     txnId || undefined,
       eventType:           `ipn_${status.toLowerCase()}`,
@@ -173,6 +189,10 @@ export class Pay2PayAdapter implements IPaymentGateway {
       internalStatus,
       paidAmount:    amount,
       paidCurrency:  'VND',
+      // feeAmount here is VND — the orchestrator passes it to calculateFees()
+      // which treats it as ipnFeeVnd. If undefined, calculateFees() estimates it.
+      feeAmount:     feeVndFromIpn,
+      feeCurrency:   'VND',
       rawPayload:    body,
     };
   }
