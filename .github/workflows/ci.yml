@@ -23,11 +23,14 @@ jobs:
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
             
+            # Get short SHA for precise tagging
+            export SHA=$(git rev-parse --short HEAD)
+
             # Build the fresh local image natively (no-cache to ensure updates)
-            docker build --no-cache -t payment-service:local .
+            docker build --no-cache -t payment-service:${SHA} .
             
             # Since you're using k3s, save and import it directly into the cluster runtime
-            docker save payment-service:local | sudo k3s ctr images import -
+            docker save payment-service:${SHA} | sudo k3s ctr images import -
             
-            # Force Kubernetes to restart the deployment and pick up the latest payment-service:local image
-            kubectl rollout restart deployment/payment-service -n default
+            # Update the deployment to use the new precise image tag
+            kubectl set image deployment/payment-service payment-service=payment-service:${SHA} -n default
